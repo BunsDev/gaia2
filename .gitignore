@@ -21,3 +21,8 @@ node_modules
 
 # cli
 dist
+
+.gas-snapshot
+ broadcast/
+  broadcast/
+ deployments/*.json
