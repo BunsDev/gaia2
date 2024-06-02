@@ -12,16 +12,16 @@ contract Deployerment is Script {
     int256 private constant CHAINLINK_DEFAULT_PRICE = 3e18;
     address public ethUsdAddress;
 
-    function run() external returns (DefiMarketPlace) {
-        // deploy the contracts
-        console.log("Deploying DefiMarketPlace");
-        // vm.startBroadcast();
-        ethUsdAddress = getEthUsdPriceFeed();
-        marketPlace = new DefiMarketPlace(ethUsdAddress);
+    // function run() external returns (DefiMarketPlace) {
+    //     // deploy the contracts
+    //     console.log("Deploying DefiMarketPlace");
+    //     // vm.startBroadcast();
+    //     ethUsdAddress = getEthUsdPriceFeed();
+    //     marketPlace = new DefiMarketPlace(ethUsdAddress);
 
-        // vm.stopBroadcast();
-        return marketPlace;
-    }
+    //     // vm.stopBroadcast();
+    //     return marketPlace;
+    // }
 
     function getEthUsdPriceFeed() public returns (address ethUsdPriceFeedAddress) {
         MockV3Aggregator ethUsdPriceFeed = new MockV3Aggregator(CHAINLINK_DEFAULT_DECIMALS, CHAINLINK_DEFAULT_PRICE);

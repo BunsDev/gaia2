@@ -27,9 +27,9 @@ contract DeployScript is ScaffoldETHDeploy {
 
         // DefiMarketPlace deploerment
         address ethAddress = deployerment.getEthUsdPriceFeed();
-        DefiMarketPlace marketPlace = new DefiMarketPlace(ethAddress);
+        // DefiMarketPlace marketPlace = new DefiMarketPlace(ethAddress);
         // DefiMarketPlace marketPlace = deployerment.marketPlace();
-        console.logString(string.concat("DefiMarketPlace deployed at: ", vm.toString(address(marketPlace))));
+        // console.logString(string.concat("DefiMarketPlace deployed at: ", vm.toString(address(marketPlace))));
         vm.stopBroadcast();
 
         /**

@@ -3,56 +3,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-// Layout of Contract:
-// version
 // imports
-// errors
-// interfaces, libraries, contracts
-// Type declarations
-// State variables
-// Events
-// Modifiers
-// Functions
-
-// Layout of Functions:
-// constructor
-// receive function (if exists)
-// fallback function (if exists)
-// external
-// public
-// internal
-// private
-// internal & private view & pure functions
-// external & public view & pure functions
-
-// imports
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {AutomationCompatible} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/ConfirmedOwner.sol";
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 
-import {OracleLib} from "./libraries/OracleLib.sol";
 /**
- * @title DefiMarketPlace
- * @dev DefiMarketPlace contract is a marketplace for DeFi products
- * @notice This contract will allow users to buy and sell tokens ,
- *  and also provide a platform for users to lend and borrow tokens
- * user can auction their tokens(NFT or ERC20) based on certain conditions , such as sports events, news events etc.
- * it can be used to trace futures of goods and commodities.
- * create a new token(det token) for auction
+ * @title SportUpdate
+ * @dev SportUpdates contract is a marketplace for DeFi products
+ * @notice This contract will get updates such as sports events, news events etc.
+ *
  */
-
-contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClient, ReentrancyGuard {
+contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
     // libraries
     using FunctionsRequest for FunctionsRequest.Request;
-    using OracleLib for AggregatorV3Interface;
 
     // errors
-    error DefiMarketPlace__InsufficientBalance();
-    error DefiMarketPlace__TransferFailed();
-    error DefiMarketPlace__NoFixturesToday();
+    error SportUpdates__InsufficientBalance();
+    error SportUpdates__TransferFailed();
+    error SportUpdates__NoFixturesToday();
 
     // Type declarations
     enum MatchStatus {
@@ -82,20 +53,19 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
         uint32 timestamp;
     }
 
-    // declaring a struct for fixture
-
     // State variables
-    mapping(address user => uint256 amount) s_balances;
-    address[] s_priceFeeds;
-    address private s_forwarderAddress;
+
     // bytes32[] private s_requestIds;
     mapping(bytes32 requestId => MatchStatus) private s_RequestedIdToMatchStatus;
+    mapping(uint32 fixtureid => bool) private s_upKeepHasCalledThisFixture;
+
     // address for chainlink functions router
     address private i_functionRouter; //should be set to immutable later
+    address private s_forwarderAddress;
     bytes32 private i_donId; //should be set to immutable later
 
     string private s_fixtureSourceCode;
-    string private s_MatchSourceCode;
+    string private s_matchSourceCode;
     uint64 private immutable i_subscriptionId; //should be set to immutable later
     uint32 private s_callbackGasLimit; //should be set to immutable later
     bytes private latestResponse;
@@ -106,69 +76,32 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
     // bytes32 private s_lastRequestId;
 
     // Events
-    event Deposited(address indexed user, uint256 amount);
-    event Withdrawn(address indexed user, uint256 amount);
 
     // constructor
     constructor(
-        bytes32 donId,
         string memory fixtureSourceCode,
         string memory MatchSourceCode,
-        address ethUsdPriceFeedAddress,
         address functionRouter,
+        bytes32 donId,
         uint64 subscriptionId,
         uint32 callbackGasLimit
     ) ConfirmedOwner(msg.sender) FunctionsClient(functionRouter) {
-        // add price feeds
-        s_priceFeeds.push(ethUsdPriceFeedAddress);
         i_functionRouter = functionRouter;
         i_subscriptionId = subscriptionId;
         i_donId = donId;
         s_fixtureSourceCode = fixtureSourceCode;
-        s_MatchSourceCode = MatchSourceCode;
+        s_matchSourceCode = MatchSourceCode;
         s_callbackGasLimit = callbackGasLimit;
     }
-
-    // deposit into the contract
-    function deposit() external payable nonReentrant {
-        // deposit into the contract
-        s_balances[msg.sender] += msg.value;
-        emit Deposited(msg.sender, msg.value);
-    }
-
-    // withdraw from the contract
-    function withdraw(uint256 amount) external nonReentrant {
-        // withdraw from the contract
-        if (s_balances[msg.sender] < amount) {
-            revert DefiMarketPlace__InsufficientBalance();
-        }
-        s_balances[msg.sender] -= amount;
-        emit Withdrawn(msg.sender, amount);
-        (bool success,) = msg.sender.call{value: amount}("");
-        if (!success) {
-            revert DefiMarketPlace__TransferFailed();
-        }
-    }
-
-    // buy  det tokens
-    // sell det tokens
-    // lend tokens
-    // borrow tokens
-    // auction tokens
-    // bet with tokens  on sports events, news events etc.
-    // rewards people who can predicts series of events correctly
-    // penalize people who can't predict series of events correctly
-
-    // getPrices
-    //get USD price
 
     function sendTodayFixturesRequest(string memory _javascriptSourceCode) external {
         // get request from Chainlink Functions for match today, this will be called once a day, by the oracle
         _sendMatchRequest(_javascriptSourceCode);
     }
 
-    function sendStartedMatchRequest(string memory _javascriptSourceCode) external {
+    function sendStartedMatchRequest(string memory _javascriptSourceCode) public {
         // get request from Chainlink Functions for an ended match
+        // this function should be called only be keepers or Owners
 
         _sendMatchRequest(_javascriptSourceCode);
     }
@@ -232,22 +165,21 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
      * @return upkeepNeeded
      * @return performData
      */
-    function checkUpkeep(bytes calldata /*checkData*/ )
-        external
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
+    function checkUpkeep(bytes calldata /*checkData*/ ) public override returns (bool, bytes memory /*performData*/ ) {
         // checkData keeps tracks for multiple upkeeps (maybe for ending a match , a cccip messages to other blockchains)
 
         // check if the match is completed
         // has to call the oracle to get the match status
 
         // checks that fixturesTodayId, fixturesTodayTimestamp are of the same length
-        bool fixtureAndTimeLength = checkFixtureAndTimeStampAretheSameLength();
+        bool fixtureAndTimeLength = _checkFixtureAndTimeStampAretheSameLength();
+        bool allMatchStatus = _checkMatchesEndedHasBeenCalledByKeepers();
+        bool upkeepNeeded = (fixtureAndTimeLength && allMatchStatus);
 
-        return (true, bytes(""));
+        return (upkeepNeeded, "");
     }
 
-    function checkFixtureAndTimeStampAretheSameLength() internal view returns (bool) {
+    function _checkFixtureAndTimeStampAretheSameLength() internal view returns (bool) {
         if (fixturesTodayId.length == fixturesTodayTimestamp.length) {
             return true;
         } else {
@@ -255,36 +187,44 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
         }
     }
 
-    function checkMatchTimeStamp(uint32 _number) internal view returns (bool) {
+    function _checkExpectedMatchCompleted(uint32 _fixtureTimeStamp) internal view returns (bool) {
         // check if the match is completed
-        // has to call the oracle to get the match status
-        if (fixturesTodayTimestamp.length < 1) {
-            revert DefiMarketPlace__NoFixturesToday();
-        }
-        if (fixturesTodayTimestamp[_number] < block.timestamp) {
+        // has to call the oracle to get the match status with after 2 hours hour after completing
+        // expect that match and oracle response is comleted after 4 hours
+        if ((_fixtureTimeStamp + 2 hours > block.timestamp) && (_fixtureTimeStamp + 4 hours < block.timestamp)) {
             return true;
+        } else {
+            return false;
         }
-        return false;
     }
 
-    /**
-     * @notice method that is actually executed by the keepers, via the registry.
-     * The data returned by the checkUpkeep simulation will be passed into
-     * this method to actually be executed.
-     * @dev The input to this method should not be trusted, and the caller of the
-     * method should not even be restricted to any single registry. Anyone should
-     * be able call it, and the input should be validated, there is no guarantee
-     * that the data passed in is the performData returned from checkUpkeep. This
-     * could happen due to malicious keepers, racing keepers, or simply a state
-     * change while the performUpkeep transaction is waiting for confirmation.
-     * Always validate the data passed in.
-     * @param performData is the data which was passed back from the checkData
-     * simulation. If it is encoded, it can easily be decoded into other types by
-     * calling `abi.decode`. This data should not be trusted, and should be
-     * validated against the contract's current state.
-     */
-    function performUpkeep(bytes calldata performData) external {
-        require(msg.sender == s_forwarderAddress, "This address does not have permission to call performUpkeep");
+    // checks that all the expected end matches are being called by the chainlink keepers
+    function _checkMatchesEndedHasBeenCalledByKeepers() internal returns (bool result) {
+        //checks if a match has started
+        if (fixturesTodayId.length == 0) {
+            return false;
+        }
+        for (uint32 i = 0; i < fixturesTodayId.length; i++) {
+            bool canCallOracle = _checkExpectedMatchCompleted(fixturesTodayTimestamp[i]);
+
+            // check if the oracle has responed to that  fixtures
+            if (canCallOracle && !s_upKeepHasCalledThisFixture[fixturesTodayId[i]]) {
+                s_upKeepHasCalledThisFixture[fixturesTodayId[i]] = true;
+                result = true;
+            } else {
+                result = false;
+            }
+        }
+    }
+
+    /// @notice Chainlink Automation function to perform upkeep
+    function performUpkeep(bytes calldata /*performData*/ ) external {
+        // (bool upkeedNeed,) = checkUpkeep("");
+        // require onwer or forward address to call this function
+        require(
+            msg.sender == owner() || msg.sender == s_forwarderAddress, "only owner or forwarder can call this function"
+        );
+        sendStartedMatchRequest(s_matchSourceCode);
     }
 
     /// @notice Set the address that `performUpkeep` is called from
@@ -299,13 +239,13 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
         if (codeType == 1) {
             return s_fixtureSourceCode;
         } else if (codeType == 2) {
-            return s_MatchSourceCode;
+            return s_matchSourceCode;
         } else {
             return "";
         }
     }
 
-    //////////////////////setter////////////////////
+    //////////////////////setters////////////////////
     /// Debuggers to help debug the contract , will be removed later///
     // eg of set function setGaslimit, setSubscriptionId, setDonId, setJavaScriptSourceCode
     // if so, some of the state variable should be  not set to immutable
@@ -326,7 +266,7 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
         if (_codeType == 1) {
             s_fixtureSourceCode = javascriptCode;
         } else if (_codeType == 2) {
-            s_MatchSourceCode = javascriptCode;
+            s_matchSourceCode = javascriptCode;
         }
     }
     //set Donid
@@ -339,29 +279,4 @@ contract DefiMarketPlace is ConfirmedOwner, AutomationCompatible, FunctionsClien
     function setFunctionRouter(address functionRouter) external onlyOwner {
         i_functionRouter = functionRouter;
     }
-
-    // get user balance
-    function getBalance(address user) public view returns (uint256) {
-        return s_balances[user];
-    }
-
-    //get lastRequestId
-
-    // get price feeds
-
-    function getPriceFeeds(uint256 order) public view returns (address) {
-        return s_priceFeeds[order];
-    }
-
-    function getUSDPrice() public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(getPriceFeeds(0));
-        (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
-        return uint256(price);
-    }
 }
-
-/**
- * 1 have proxy smart contract addresses  which will point to the  updated or new smart contract ,
- *  2.  deploy  a new contract and inform  users and exchanges  to use that contract
- *  3.  use delegatecalls to call other smart contracts
- */
