@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "../contracts/YourContract.sol";
 import "./DeployHelpers.s.sol";
 import {SportUpdate} from "../contracts/SportUpdate.sol";
 import {HelperConfig} from "./HelperConfig.sol";
@@ -20,7 +19,8 @@ contract DeployScript is ScaffoldETHDeploy {
     uint64 public subId;
     string public fixtureSource;
     string public mactchSource;
-    uint32 constant CALLBACK_GAS_LIMIT = 3000000;
+    uint32 constant CALLBACK_GAS_LIMIT = 300000;
+    uint64 constant SERCRET_vERSION = 1717366052;
 
     HelperConfig public config;
     NetworkConfig activeNetwork;
@@ -41,7 +41,7 @@ contract DeployScript is ScaffoldETHDeploy {
         vm.startBroadcast(deployerPrivateKey);
 
         SportUpdate sportUpdate =
-            new SportUpdate(fixtureSource, mactchSource, functionsRouter, donId, subId, CALLBACK_GAS_LIMIT);
+            new SportUpdate("", "", functionsRouter, donId, subId, CALLBACK_GAS_LIMIT, SERCRET_vERSION);
 
         vm.stopBroadcast();
 

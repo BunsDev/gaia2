@@ -24,6 +24,7 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
     error SportUpdates__InsufficientBalance();
     error SportUpdates__TransferFailed();
     error SportUpdates__NoFixturesToday();
+    error SportUpdate__NotOwnerOrForwarder();
 
     // Type declarations
     enum MatchStatus {
@@ -64,15 +65,18 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
     address private s_forwarderAddress;
     bytes32 private i_donId; //should be set to immutable later
 
-    string private s_fixtureSourceCode;
+    string private s_fixturesTodaySourceCode;
     string private s_matchSourceCode;
-    uint64 private immutable i_subscriptionId; //should be set to immutable later
+    uint64 private i_subscriptionId; //should be set to immutable later
     uint32 private s_callbackGasLimit; //should be set to immutable later
+    uint8 s_secretSlot;
+    uint64 private s_secretVersion;
     bytes private latestResponse;
     uint256 private timeFullfilled;
     uint32[] fixturesTodayId;
     uint32[] fixturesTodayTimestamp;
     uint32[] startedMatch;
+
     // bytes32 private s_lastRequestId;
 
     // Events
@@ -84,32 +88,43 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
         address functionRouter,
         bytes32 donId,
         uint64 subscriptionId,
-        uint32 callbackGasLimit
+        uint32 callbackGasLimit,
+        uint64 secretVersion
     ) ConfirmedOwner(msg.sender) FunctionsClient(functionRouter) {
         i_functionRouter = functionRouter;
         i_subscriptionId = subscriptionId;
         i_donId = donId;
-        s_fixtureSourceCode = fixtureSourceCode;
+        s_fixturesTodaySourceCode = fixtureSourceCode;
         s_matchSourceCode = MatchSourceCode;
         s_callbackGasLimit = callbackGasLimit;
+        s_secretVersion = secretVersion;
     }
 
-    function sendTodayFixturesRequest(string memory _javascriptSourceCode) external {
+    modifier onlyOwnerOrForwarder() {
+        if (msg.sender != owner() || msg.sender != s_forwarderAddress) {
+            revert SportUpdate__NotOwnerOrForwarder();
+        }
+
+        _;
+    }
+
+    function sendTodayFixturesRequest() external {
         // get request from Chainlink Functions for match today, this will be called once a day, by the oracle
-        _sendMatchRequest(_javascriptSourceCode);
+        sendMatchRequest(s_fixturesTodaySourceCode);
     }
 
-    function sendStartedMatchRequest(string memory _javascriptSourceCode) public {
+    function sendStartedMatchRequest() public {
         // get request from Chainlink Functions for an ended match
         // this function should be called only be keepers or Owners
 
-        _sendMatchRequest(_javascriptSourceCode);
+        sendMatchRequest(s_matchSourceCode);
     }
 
     // get request from Chainlink Functions for match today
-    function _sendMatchRequest(string memory _javascriptSourceCode) private returns (bytes32 requestId) {
+    function sendMatchRequest(string memory _javascriptSourceCode) public returns (bytes32 requestId) {
         FunctionsRequest.Request memory req;
         req.initializeRequestForInlineJavaScript(_javascriptSourceCode);
+        req.addDONHostedSecrets(0, s_secretVersion);
         requestId = _sendRequest(req.encodeCBOR(), i_subscriptionId, s_callbackGasLimit, i_donId);
         s_RequestedIdToMatchStatus[requestId] = MatchStatus.NotStarted;
         return requestId;
@@ -224,7 +239,7 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
         require(
             msg.sender == owner() || msg.sender == s_forwarderAddress, "only owner or forwarder can call this function"
         );
-        sendStartedMatchRequest(s_matchSourceCode);
+        sendStartedMatchRequest();
     }
 
     /// @notice Set the address that `performUpkeep` is called from
@@ -235,15 +250,6 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
     }
 
     // get javascript source code
-    function getJavaScriptSourceCode(uint8 codeType) public view returns (string memory) {
-        if (codeType == 1) {
-            return s_fixtureSourceCode;
-        } else if (codeType == 2) {
-            return s_matchSourceCode;
-        } else {
-            return "";
-        }
-    }
 
     //////////////////////setters////////////////////
     /// Debuggers to help debug the contract , will be removed later///
@@ -263,9 +269,9 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
      * @param _codeType  1 for fixtureSourceCode, 2 for MatchSourceCode
      */
     function setjavacriptCode(string memory javascriptCode, uint8 _codeType) external onlyOwner {
-        if (_codeType == 1) {
-            s_fixtureSourceCode = javascriptCode;
-        } else if (_codeType == 2) {
+        if (_codeType == 0) {
+            s_fixturesTodaySourceCode = javascriptCode;
+        } else if (_codeType == 1) {
             s_matchSourceCode = javascriptCode;
         }
     }
@@ -278,5 +284,31 @@ contract SportUpdate is ConfirmedOwner, AutomationCompatible, FunctionsClient {
     //set function router
     function setFunctionRouter(address functionRouter) external onlyOwner {
         i_functionRouter = functionRouter;
+    }
+    //set subscription id
+
+    function setSubscriptionId(uint64 subscriptionId) external onlyOwner {
+        i_subscriptionId = subscriptionId;
+    }
+
+    // getters
+    function getJavaScriptSourceCode(uint8 codeType) public view returns (string memory) {
+        if (codeType == 0) {
+            return s_fixturesTodaySourceCode;
+        } else if (codeType == 1) {
+            return s_matchSourceCode;
+        } else {
+            return "";
+        }
+    }
+    // get today fixtures
+
+    function getTodayFixtures() external view returns (uint32[] memory) {
+        return (fixturesTodayId);
+    }
+
+    //  get the time the fixtures were gotten
+    function getTodayFixturesTimestamp() external view returns (uint32[] memory) {
+        return (fixturesTodayTimestamp);
     }
 }
